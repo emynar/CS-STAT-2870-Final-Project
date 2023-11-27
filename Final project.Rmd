@@ -1,0 +1,118 @@
+---
+title: "Final Project"
+author: "Emily Mynar"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+pacman::p_load(dplyr, ggplot2, tidyverse)
+
+parks <- read.csv('parks.csv') |>
+  janitor::clean_names()
+
+species <- read.csv('species.csv') |>
+  janitor::clean_names() 
+
+theme_set(theme_bw())
+
+```
+
+
+```{r data cleaning}
+
+# Display species categories
+categories <-
+  species |>
+  mutate(category = factor(category)) |>
+  sapply(levels)
+categories[["category"]]
+
+
+species_clean <-
+  species |>
+  # Remove record status and seasonality
+  select(-record_status, -seasonality, -x) |>
+  # Filter non-animal species
+  filter(!category %in% c('Algae', 'Fungi', 'Nonvascular Plant', 'Vascular Plant')) |>
+  # Add genus column
+  mutate(genus = str_split(scientific_name, " ", simplify = T)[ , 1]) |>
+  # Reorder columns
+  relocate(genus, .before = scientific_name)
+
+parks_clean <-
+  parks |>
+  mutate(park_name = str_remove(park_name, 'National Park'),
+         park_name = str_remove(park_name, 'and Preserve'))
+
+species_park <-
+  species_clean |>
+  # Add park info
+  left_join(y = parks_clean, by = 'park_name') |>
+  select(-park_code) |>
+  mutate(park_name = str_remove(park_name, 'National Park'),
+         park_name = str_remove(park_name, 'and Preserve'))
+
+
+```
+
+
+
+```{r taxonomic categories by park}
+
+categories_by_park <-
+  species_park |>
+  group_by(park_name, state, acres, latitude, longitude, category) |>
+  summarise(cat_sum = n())
+
+ggplot(data = categories_by_park,
+       mapping = aes(x = park_name,
+                     y = cat_sum,
+                     fill = category)) +
+  
+  geom_col(position = 'stack') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Number of species in each park by category') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+
+
+
+# Same plot but by proportion
+ggplot(data = categories_by_park,
+       mapping = aes(x = park_name,
+                     y = cat_sum,
+                     fill = category)) +
+  
+  geom_col(position = 'fill') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7)) +
+  
+  labs(x = 'Park name',
+       y = 'Proportion of species',
+       fill = 'Category',
+       title = 'Number of species in each park by category') +
+  
+  scale_y_continuous(labels = scales::percent,
+                     expand = c(0,0)) 
+  
+  
+
+```
+
+
