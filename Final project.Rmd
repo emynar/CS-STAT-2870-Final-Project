@@ -1,38 +1,50 @@
 ---
 title: "Final Project"
-author: "Emily Mynar"
+author: "Emily Mynar, Pierre Beaurand, & Jack McCormick"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 
 ```{r setup, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE,
-                      fig.pos = 'center')
+                      fig.width=8, 
+                      fig.height=5)
 
 
+# Load packages
+pacman::p_load(dplyr, ggplot2, tidyverse, ggthemes, maps, ggrepel)
 
-pacman::p_load(dplyr, ggplot2, tidyverse)
+# Set default theme
+theme_set(theme_bw())
 
+# Read in files
 parks <- read.csv('parks.csv') |>
   janitor::clean_names()
 
 species <- read.csv('species.csv') |>
   janitor::clean_names() 
 
-theme_set(theme_bw())
+tibble(species)
+tibble(parks)
+```
+```{r categories}
+# Order categories by number of species
+species_per_category <-
+  species |>
+  group_by(category) |>
+  summarise(num_species = n()) |>
+  arrange(desc(num_species))
+
+species_per_category
+
+# Save categories as a vector
+categories <-
+  species_per_category$category
 
 ```
 
 
 ```{r data cleaning}
-
-# Display species categories
-categories <-
-  species |>
-  mutate(category = factor(category)) |>
-  sapply(levels)
-categories[["category"]]
-
 
 species_clean <-
   species |>
@@ -43,35 +55,53 @@ species_clean <-
   # Add genus column
   mutate(genus = str_split(scientific_name, " ", simplify = T)[ , 1]) |>
   # Reorder columns
-  relocate(genus, .before = scientific_name)
+  relocate(genus, .before = scientific_name) |>
+  # Make park names shorter
+  mutate(park_name = str_remove(park_name, 'National Parks'),
+         park_name = str_remove(park_name, 'National Park'),
+         park_name = str_remove(park_name, 'and Preserve'))
+
+tibble(species_clean)
+
 
 parks_clean <-
   parks |>
-  mutate(park_name = str_remove(park_name, 'National Park'),
+  # Make park names shorter
+  mutate(park_name = str_remove(park_name, 'National Parks'),
+         park_name = str_remove(park_name, 'National Park'),
          park_name = str_remove(park_name, 'and Preserve'))
+
+tibble(parks_clean)
+
 
 species_park <-
   species_clean |>
-  # Add park info
+  # Add park info to species dataset
   left_join(y = parks_clean, by = 'park_name') |>
+  # Remove park code
   select(-park_code) |>
-  mutate(park_name = str_remove(park_name, 'National Park'),
-         park_name = str_remove(park_name, 'and Preserve'))
+  # Remove parks in Alaska or Hawaii for mapping purposes
+  filter(!state %in% c('AK', 'HI')) 
+  
 
-
+tibble(species_park)
 ```
 
 ```{r species by park}
 
 ggplot(data = species_park |> group_by(park_name),
-       mapping = aes(x = park_name)) +
+       mapping = aes(x = fct_infreq(park_name))) +
   
   geom_bar(fill = 'deepskyblue3') +
   
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1,
-                                   size = 7)) +
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
   
   labs(x = 'Park name',
        y = 'Number of species',
@@ -82,26 +112,46 @@ ggplot(data = species_park |> group_by(park_name),
 
 
 ```
+```{r species richness order}
+
+species_per_park <-
+  species_park |>
+  group_by(park_name, latitude, longitude, state) |>
+  summarise(num_species = n()) |>
+  arrange(desc(num_species))
+
+tibble(species_per_park)
+
+park_order <-
+  species_per_park$park_name
+
+
+```
 
 
 ```{r taxonomic categories by park}
 
 categories_by_park <-
   species_park |>
-  group_by(park_name, state, acres, latitude, longitude, category) |>
+  group_by(park_name, category) |>
   summarise(cat_sum = n())
 
 ggplot(data = categories_by_park,
-       mapping = aes(x = park_name,
-                     y = cat_sum,
-                     fill = category)) +
+       mapping = aes(x = factor(park_name,
+                                levels = park_order))) +
   
-  geom_col(position = 'stack') +
+  geom_col(mapping = aes(y = cat_sum,
+                         fill = category),
+           position = 'stack') +
   
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1,
-                                   size = 7)) +
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
   
   labs(x = 'Park name',
        y = 'Number of species',
@@ -114,7 +164,8 @@ ggplot(data = categories_by_park,
 
 # Same plot but by proportion
 ggplot(data = categories_by_park,
-       mapping = aes(x = park_name,
+       mapping = aes(x = factor(park_name,
+                                 levels = park_order),
                      y = cat_sum,
                      fill = category)) +
   
@@ -123,7 +174,11 @@ ggplot(data = categories_by_park,
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1,
-                                   size = 7)) +
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
   
   labs(x = 'Park name',
        y = 'Proportion of species',
@@ -136,5 +191,69 @@ ggplot(data = categories_by_park,
   
 
 ```
+```{r}
+#TODO: correlation between size of park and number of species
+#TODO: map of species richness on US map
+```
 
+```{r map outline}
+map_outline <-
+  ggplot(data = map_data(map = 'state'),
+         mapping = aes(x = long,
+                       y = lat,
+                       group = group)) +
+  
+  geom_polygon(fill = 'white',
+               color = 'grey30') +
+  
+  theme_map() +
+  
+  coord_map(projection = "albers", 
+            lat0 = 39, lat1 = 45) +
+  
+  scale_x_continuous(expand = c(0,0)) +
+  
+  scale_y_continuous(expand = c(0,0))
+
+```
+
+```{r species richness map}
+richness_map <-
+  
+  map_outline +
+  
+  geom_point(data = species_per_park,
+           mapping = aes(x = longitude,
+                        y = latitude,
+                       group = park_name,
+                       size = num_species,
+                       color = state)) +
+  
+  geom_text_repel(data = species_per_park,
+            mapping = aes(x = longitude,
+                          y = latitude,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  scale_size(breaks = c(500, 1000, 1500, 2000, 2500, 3000)) +
+  
+  labs(title = 'Species richness by park',
+       size = 'Number of species') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+  
+  
+richness_map
+```
 
