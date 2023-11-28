@@ -6,7 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=TRUE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.pos = 'center')
 
 
 
@@ -60,6 +61,27 @@ species_park <-
 
 ```
 
+```{r species by park}
+
+ggplot(data = species_park |> group_by(park_name),
+       mapping = aes(x = park_name)) +
+  
+  geom_bar(fill = 'deepskyblue3') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Number of species in each park') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+
+
+```
 
 
 ```{r taxonomic categories by park}
@@ -106,7 +128,7 @@ ggplot(data = categories_by_park,
   labs(x = 'Park name',
        y = 'Proportion of species',
        fill = 'Category',
-       title = 'Number of species in each park by category') +
+       title = 'Proportion of species in each park by category') +
   
   scale_y_continuous(labels = scales::percent,
                      expand = c(0,0)) 
