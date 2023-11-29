@@ -49,7 +49,7 @@ tibble(categories)
 ```
 14 categories, but for our purposes, we only care about the **animal** diversity of these parks. As such, we will go ahead and remove *algae*, *fungi*, *Nonvascular plants*, and *Vascular plants*.
 
-We'll also implement a handful of other changes to our data: 
+We'll also implement a handful of other changes to our data: removing record status and seasonality, which are not useful for our driving question, adding a genus category, which is taken from the scientific name, and shortening the names of parks to remove the suffix for clarity.
 
 ```{r data cleaning}
 
@@ -80,7 +80,9 @@ parks_clean <-
 
 tibble(parks_clean)
 ```
+Lastly, we'll combine the two data sets and remove the park code.
 
+We have decided to restrict our data to the contiguous United States, for a number of reasons. Alaska and Hawaii have populations that are so different from the rest of the country that they are hardly comparable. Removing them makes our data far less complex, as it removes species that are found nowhere else in the country. It also serves the secondary purpose of making the data mapping easier. 
 
 ```{r combined dataset}
 species_park <-
@@ -95,7 +97,7 @@ species_park <-
 tibble(species_park)
 ```
 
-
+Here are our updated species, categories, which will be used throughout the rest of the analysis. 
 
 ```{r updated categories}
 
@@ -109,7 +111,9 @@ categories_clean <-
 tibble(categories_clean)
 
 ```
+### Data Analysis
 
+Because our categories are not true taxonomic groupings, we need some context to the diversity within each. Lets examine orders first.
 
 ```{r overall taxanomic categories proportion}
 
@@ -167,6 +171,11 @@ category_prop |>
 
 
 ```
+As seen, the vast majority of species observed fall into the **bird** or **insect** categories. This is expected, but for different reasons for each.
+
+1) Insects: have by far the highest species diversity of any group.
+
+2) Birds: Because we removed seasonality, we are looking at species spotted in the park at any time of year, including species that are strictly migratory. Due to their migratory nature, the average bird species is often has a wider range of observation than that of an equivalent reptile, amphibian or mammal. Additionally, due to a variety of factors, birds are often have more comprehensive records than any other group. The MAPS program, created by the Institute for Bird Populations has gone a long way to creating distribution patterns across the United States, and the role of citizen science, on programs like eBird or iNaturalist create lists of observed species without the need for a monitoring program run by the park. 
 ```{r species by park}
 
 ggplot(data = species_park |> group_by(park_name),
@@ -191,7 +200,7 @@ ggplot(data = species_park |> group_by(park_name),
   scale_y_continuous(expand = c(0,0, 0.05, 0)) 
 
 
-```
+````
 
 
 ```{r species richness order}
@@ -275,7 +284,7 @@ ggplot(data = categories_by_park,
   
 
 ```
-
+This graph reveals an issue with our data. The greatest predictor of species diversity is that of **insect diversity**. This makes sense - insects have by far the greatest species diversity on large. However, several National Parks reported *no insects* in their data. There is the possibility that certain sites observed no insects - 
 
 ```{r map outline}
 map_outline <-
