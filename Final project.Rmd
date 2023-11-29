@@ -1,6 +1,6 @@
 ---
 title: "Final Project"
-author: "Emily Mynar & Jack McCormick"
+author: "Emily Mynar, Jack McCormick, & Pierre Beaurang"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -27,8 +27,15 @@ species <- read.csv('species.csv') |>
 tibble(species)
 tibble(parks)
 ```
+### Data Cleaning
 
+Our data comes from two data sets:
 
+1) **parks:** contains general information (size, latitude, longitude, etc.) about each National Park in the United States. This will be largely supplemental, but provides important contextual information we will use later
+
+2) **species:** contains a record of each species recorded in a certain National Park. This will be our main data set.
+
+Along with the true taxonomic groupings of order and family, the data also includes a *'category'* variable, which is not equivalent to any true taxonomic grouping, but instead consists of informal groupings which are recognizable to the layperson. Let's take a look at them now, since we'll be using these groups for much of our analysis.
 ```{r categories}
 
 # Display species categories
@@ -40,7 +47,9 @@ categories <-
 
 tibble(categories)
 ```
+14 categories, but for our purposes, we only care about the **animal** diversity of these parks. As such, we will go ahead and remove *algae*, *fungi*, *Nonvascular plants*, and *Vascular plants*.
 
+We'll also implement a handful of other changes to our data: 
 
 ```{r data cleaning}
 
@@ -382,6 +391,22 @@ ggplot(data = species_per_park,
 ```
 
 ```{r size richness correlation}
+species_per_park |>
+  mutate(
+    number = "num_species"
+  ) -> 
+  species_corr 
+  
 
+
+ggcorr(
+  data = species_corr,
+  low = "red3",
+  mid = "white",
+  high = "blue3",
+  label = T,
+  label_round = 2
+  
+)
 ```
 
