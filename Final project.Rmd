@@ -263,21 +263,48 @@ In contrast, **Congaree** has the lowest number of endangered species.
 ```{r endangered species richness order}
 endangered_species_per_park <-
   endangered_species |>
-  group_by(park_name, latitude, longitude, state, acres) |>
+  group_by(park_name) |>
   summarise(num_species = n()) |>
+  select(park_name, num_species) |>
   arrange(desc(num_species))
 
-tibble(species_per_park)
+tibble(endangered_species_per_park)
 
-park_order <-
-  species_per_park$park_name
 
 ```
+```{r endangered species proportion graph} 
+
+# clearly a work in progress, having some issues with the aes mapping. Will work on it later
+ggplot(data = proportion,
+       mapping = aes(x = proportion_endangered)) +
+  
+  geom_bar(fill = 'deepskyblue3') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Threatened Species per park') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+```
+
 ```{r Proportion Endangered Species Per Park}
 ## work in progress
 left_join(species_per_park, endangered_species_per_park, by = "park_name") |>
-  mutate(proportion_endangered = (num_species.y / num_species.x) * 100) ->
-  proportion
+  mutate(proportion_endangered = (num_species.y / num_species.x) * 100) |>
+  select(name = park_name, proportion_endangered) |>
+  arrange(desc(proportion_endangered)) ->
+  proportion 
+  tibble(proportion)
   
 
 
