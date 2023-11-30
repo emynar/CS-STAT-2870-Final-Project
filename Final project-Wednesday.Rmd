@@ -181,7 +181,6 @@ As seen, the vast majority of species observed fall into the **bird** categories
 2) Additionally, due to a variety of factors, birds are often have more comprehensive records than any other group. The MAPS program, created by the Institute for Bird Populations has gone a long way to creating distribution patterns across the United States, and the role of citizen science, on programs like eBird or iNaturalist create lists of observed species without the need for a monitoring program run by the park. 
 
 3) Birds naturally have a high diversity, and occur across ecosystems. As such, every park is likely to have birds present, while fish, amphibians, reptiles, and mammals are far more restricted to certain habitats. 
-
 ```{r species by park}
 
 ggplot(data = species_park |> group_by(park_name),
@@ -205,10 +204,9 @@ ggplot(data = species_park |> group_by(park_name),
   
   scale_y_continuous(expand = c(0,0, 0.05, 0)) 
 
-```
-Deciding on conservation priorities requires the consideration of many different factors. For our purposes, we would argue that the biodiversity of a region is the most important factor. What method should be used to calculate this amorphous idea of 'biodiversity' is a topic of some debate. For our purposes, we have chosen a **raw species richness.** 
 
-As can be seen in the graph above and table below, the parks with the greatest raw species richness are **Biscayne,** **Redwoods,** & **Everglades**. The parks with the lowest are **Mt. Rainier**, **Pinnacles** and **Black Canyon of the Gunnison**
+````
+
 
 ```{r species richness order}
 
@@ -222,63 +220,6 @@ tibble(species_per_park)
 
 park_order <-
   species_per_park$park_name
-
-
-```
-However, raw number of species does not tell a manager the whole picture. Certain spcies require more help than others...
-```{r endangered species by park}
-#isolating endangered species
-endangered_species <-
-  species_park |>
-  filter(conservation_status != "")
-
-ggplot(data = endangered_species |> group_by(park_name),
-       mapping = aes(x = fct_infreq(park_name))) +
-  
-  geom_bar(fill = 'deepskyblue3') +
-  
-  theme(axis.text.x = element_text(angle = 90, 
-                                   vjust = 0.5, 
-                                   hjust = 1,
-                                   size = 7),
-        plot.title = element_text(size = 12,
-                                  hjust = 0.5,
-                                  face = 'bold'),
-        axis.title = element_text(size = 10)) +
-  
-  labs(x = 'Park name',
-       y = 'Number of species',
-       fill = 'Category',
-       title = 'Threatened Species per park') +
-  
-  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
-
-
-
-```
-Here we can see that the parks with the highest number of species listed as a 'species of concern' or worse by the National Parks are **Death Valley,** **Redwoods,** and the **Grand Canyon.** 
-
-In contrast, **Congaree** has the lowest number of endangered species.
-
-```{r endangered species richness order}
-endangered_species_per_park <-
-  endangered_species |>
-  group_by(park_name, latitude, longitude, state, acres) |>
-  summarise(num_species = n()) |>
-  arrange(desc(num_species))
-
-tibble(species_per_park)
-
-park_order <-
-  species_per_park$park_name
-
-```
-```{r Proportion Endangered Species Per Park}
-## work in progress
-left_join(species_per_park, endangered_species_per_park, by = "park_name") |>
-  mutate(proportion_endangered = (num_species.y / num_species.x) * 100) ->
-  proportion
-  
 
 
 ```
@@ -348,8 +289,6 @@ ggplot(data = categories_by_park,
   
 
 ```
-
-
 ```{r map outline}
 map_outline <-
   ggplot(data = map_data(map = 'state'),
@@ -411,46 +350,6 @@ map_outline <-
   
 richness_map
 ```
-```{r endangered species map by park}
-endangered_map <-
-  
-  map_outline +
-  
-  geom_point(data = endangered_species_per_park,
-           mapping = aes(x = longitude,
-                        y = latitude,
-                       group = park_name,
-                       size = num_species,
-                       color = state)) +
-  
-  geom_text_repel(data = endangered_species_per_park,
-            mapping = aes(x = longitude,
-                          y = latitude,
-                          group = park_name,
-                          label = park_name),
-            hjust = 0.1,
-            size = 1.8,
-            fontface= 'bold',
-            max.overlaps = 15) +
-  
-  scale_size(breaks = c(500, 1000, 1500, 2000, 2500, 3000)) +
-  
-  labs(title = 'Number of endangered species by park',
-       size = 'Number of species') +
-  
-  guides(color = F) +
-  
-  theme(legend.position = 'bottom',
-        legend.direction = 'horizontal',
-        legend.box.background = element_rect(color = 'black'),
-        plot.title = element_text(size = 12,
-                                  hjust = 0.5,
-                                  face = 'bold'))
-  
-  
-endangered_map
-
-```
 
 
 ```{r park size map}
@@ -504,9 +403,16 @@ ggplot(data = species_per_park,
 ```
 
 ```{r size richness correlation}
+species_per_park |>
+  mutate(
+    number = "num_species"
+  ) -> 
+  species_corr 
+  
 
-GGally::ggcorr(
-  data = species_per_park,
+
+ggcorr(
+  data = species_corr,
   low = "red3",
   mid = "white",
   high = "blue3",
