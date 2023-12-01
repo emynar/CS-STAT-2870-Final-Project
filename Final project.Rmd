@@ -225,7 +225,8 @@ park_order <-
 
 
 ```
-However, raw number of species does not tell a manager the whole picture. Certain spcies require more help than others...
+However, raw number of species does not tell a manager the whole picture. Certain species require more help than others. If the national parks service was concerned with protection endangered species, certain parks may be more worth investing in than others. 
+
 ```{r endangered species by park}
 #isolating endangered species
 endangered_species <-
@@ -263,52 +264,54 @@ In contrast, **Congaree** has the lowest number of endangered species.
 ```{r endangered species richness order}
 endangered_species_per_park <-
   endangered_species |>
-  group_by(park_name) |>
+  group_by(park_name, latitude, longitude, state, acres) |>
   summarise(num_species = n()) |>
-  select(park_name, num_species) |>
   arrange(desc(num_species))
 
 tibble(endangered_species_per_park)
 
+endangered_order <-
+  endangered_species_per_park$park_name
+
 
 ```
-```{r endangered species proportion graph} 
+The total number of endangered species is important for management consideration, but these ecosystems may just have a large gross number of species. However, it may be worth focusing on ecosystems with a large **proportion of endangered species**.
 
-# clearly a work in progress, having some issues with the aes mapping. Will work on it later
-ggplot(data = proportion,
-       mapping = aes(x = proportion_endangered)) +
-  
-  geom_bar(fill = 'deepskyblue3') +
-  
-  theme(axis.text.x = element_text(angle = 90, 
-                                   vjust = 0.5, 
-                                   hjust = 1,
-                                   size = 7),
-        plot.title = element_text(size = 12,
-                                  hjust = 0.5,
-                                  face = 'bold'),
-        axis.title = element_text(size = 10)) +
-  
-  labs(x = 'Park name',
-       y = 'Number of species',
-       fill = 'Category',
-       title = 'Threatened Species per park') +
-  
-  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
-```
+There are two theories behind why an ecosystem has many endangered species:
+1) Some quality of the environment attracts species with specific habitat requirements, which are more likely to become endangered. 
+
+2) The national park is the last remnant of an ecosystem that used to be far more prevalent, and the species within became endangered as the ecosystem did. 
+
+Either way, an organization considered with preserving biodiversity would get more 'bang for their buck' if they put their attention on these ecosystems. 
+
+Under these criteria, the parks that should be focused on are *Pinnacles,* *The Petrified Forest*, and *Sequoia*. *Biscayne,* *The Everglades*, and *The Dry Tortugas*, on the other hand, consist of ecosystems primarily composed of non-threatened species. 
 
 ```{r Proportion Endangered Species Per Park}
 ## work in progress
-left_join(species_per_park, endangered_species_per_park, by = "park_name") |>
+prop <- left_join(species_per_park, endangered_species_per_park, by = "park_name")
+
+prop |>
+  ungroup() |>
   mutate(proportion_endangered = (num_species.y / num_species.x) * 100) |>
-  select(name = park_name, proportion_endangered) |>
-  arrange(desc(proportion_endangered)) ->
-  proportion 
-  tibble(proportion)
+  arrange(desc(proportion_endangered)) -> proportion_endangered
+
+tibble(proportion_endangered)
+
+proportion_order <-
+  proportion_endangered$park_name
   
 
 
 ```
+Lastly, to provide some context to the previous data points, the following graph shows the taxonomic categories present in each park. 
+
+The most important insight to be gleaned from this data is the *'Biscayne Question'.* This park has simultaneously the highest number of species and the lowest proportion of endangered species (the same paradox is true of Everglades park, to a lesser extent). 
+
+However, the answer becomes present here. According to the IUCN, bony fishes are the invertebrate group with the lowest proportion of endangered species. The parks in our data set that have a large number of fish (Biscayne, Everglades, Dry Tortugas, etc.) are likely to have a low proportion of endangered species.
+
+As such, if the National Park Service is concerned with managing for *raw biodiversity*, we would advocate for an *increased focus on largely aquatic parks*. If they are more concerned with *protecting endangered species* we could recommend an approach that *disregards largely aquatic parks in favor of others*. 
+
+Of course, the reality is not black and white, and this study ignores other factors that could potentially swing the recommendation in a different direction. No management plan is complete when only one facet of the problem is included. This is simply our recommendation based on the information at hand. 
 
 
 ```{r taxonomic categories by park}
@@ -375,6 +378,10 @@ ggplot(data = categories_by_park,
   
 
 ```
+### Mapping
+We have created four maps to illustrate certain relationships between the data.
+
+In all maps, the color of the point represents the state the park lies within.
 
 
 ```{r map outline}
@@ -398,6 +405,9 @@ map_outline <-
 
 ```
 
+Map 1:
+
+In this map, we have used the size of the point to represent the *gross species richness*. 
 
 ```{r species richness map}
  richness_map <-
@@ -438,6 +448,10 @@ map_outline <-
   
 richness_map
 ```
+Map 2:
+
+In this map, we have used the size of the point to represent the *total endangered species*. 
+
 ```{r endangered species map by park}
 endangered_map <-
   
@@ -478,6 +492,57 @@ endangered_map <-
 endangered_map
 
 ```
+Map 3:
+
+In this map, we have used the size of the point to represent the *proportion of species that are threatened or endangered*.
+
+```{r proportion endangered map}
+
+proportion_map <-
+  
+  map_outline +
+  
+  geom_point(data = proportion,
+           mapping = aes(x = longitude.x,
+                        y = latitude.x,
+                       group = park_name,
+                       size = proportion_endangered,
+                       color = state.x)) +
+  
+  geom_text_repel(data = proportion,
+            mapping = aes(x = longitude.x,
+                          y = latitude.x,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  scale_size(breaks = c(500, 1000, 1500, 2000, 2500, 3000)) +
+  
+  labs(title = 'Proportion threatened species by park',
+       size = 'Proportion of species') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+  
+  
+proportion_map
+
+```
+
+Map 4:
+
+In our final map, we have used the size of the point to represent the *total endangered species*.
+
+We will use the size of parks and the number of species in the next segment.
 
 
 ```{r park size map}
@@ -520,6 +585,8 @@ richness_map <-
   
 richness_map
 ```
+### Machine Learning
+Before we begin with our machine learning segment, we will primarily examine the relationship between park size and biodiversity. This analysis will provide the National Park Service with an invaluable data point. A larger park will require more funding, manpower, and work. If it is assumed that larger park = high biodiversity, the National Park Service will assign the most intensive management plans to the largest parks. However, using machine learning, we can devise a method that will determine the amount of effort to be put into a park based on the relationship between park size and biodiversity.
 
 ```{r scatter plot of size vs richness}
 # very much in progress duh
@@ -529,6 +596,7 @@ ggplot(data = species_per_park,
   
   geom_point()
 ```
+The very first thing to be done is to determine if this relationship actually exists. To do this, we will construct a correlation matrix of the variables currently used.
 
 ```{r size richness correlation}
 
@@ -542,4 +610,4 @@ GGally::ggcorr(
   
 )
 ```
-
+As we can see, there is a positive correlation between the number of species and the size of the park. Knowing this, we can forge ahead with our machine learning and examine this relationship in detail. 
