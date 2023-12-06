@@ -28,6 +28,7 @@ species <- read.csv('species.csv') |>
 
 tibble(species)
 tibble(parks)
+
 ```
 \newpage
 
@@ -47,7 +48,7 @@ categories <-
   species |>
   group_by(category) |>
   summarize(category_count = n()) |>
-  select(category)
+  dplyr::select(category)
 
 tibble(categories)
 ```
@@ -62,7 +63,7 @@ We'll also implement a handful of other changes to our data: removing record sta
 species_clean <-
   species |>
   # Remove record status and seasonality
-  select(-record_status, -seasonality, -x) |>
+  dplyr::select(-record_status, -seasonality, -x) |>
   # Filter non-animal species,
   # Filter invertebrate species
   filter(!category %in% c('Algae', 'Fungi', 'Nonvascular Plant', 'Vascular Plant', 'Insect', 'Invertebrate', 'Crab/Lobster/Shrimp', 'Slug/Snail', 'Spider/Scorpion')) |>
@@ -97,7 +98,7 @@ species_park <-
   # Add park info to species dataset
   left_join(y = parks_clean, by = 'park_name') |>
   # Remove park code
-  select(-park_code) |>
+  dplyr::select(-park_code) |>
   # Remove parks in Alaska or Hawaii for mapping purposes
   filter(!state %in% c('AK', 'HI')) 
   
@@ -113,7 +114,7 @@ categories_clean <-
   species_clean |>
   group_by(category) |>
   summarize(category_count = n()) |>
-  select(category)
+  dplyr::select(category)
 
 tibble(categories_clean)
 
@@ -133,7 +134,7 @@ category_prop <-
   summarize(number_cat = n()) |>
   mutate(number_tot = sum(number_cat),
          prop = number_cat/number_tot) |>
-  select(category, prop)
+  dplyr::select(category, prop)
 
 category_prop |>
   
@@ -156,7 +157,7 @@ category_prop |>
   summarize(number_ord = n()) |>
   mutate(number_tot = sum(number_ord),
          prop = number_ord/number_tot) |>
-  select(category, order, prop) |>
+  dplyr::select(category, order, prop) |>
   
   ggplot(mapping = aes(
     x = prop,
@@ -655,7 +656,7 @@ regression tree
 species_and_acres <-
   species_per_park |>
   ungroup() |>
-  select(acres, num_species)
+  dplyr::select(acres, num_species)
 
 species_tree_full <-
   rpart(
@@ -723,7 +724,6 @@ normalize <- function(x){
 #  normalizing the species data:
 num_species_norm <- 
   species_and_acres |>
-  select(-num_species) |>
   mutate(across(.cols = acres,
                 .fns = normalize))
 
@@ -734,7 +734,6 @@ standardize <- function(x){
 
 num_species_stan <- 
   species_and_acres |>
-    select(-num_species) |>
   mutate(across(.cols = acres,
                 .fns = standardize))
 
@@ -743,8 +742,8 @@ num_species_stan <-
 ```{r knn_reg}
 
 knn.reg(
-  train = num_species_norm,
-  y = species_and_acres$num_species,
+  train = num_species_norm$acres,
+  y = num_species_norm$num_species,
   k = 5
 ) ->
   species_knn_5
@@ -770,20 +769,18 @@ species_df |>
 ```
 
 ``` {r k_norm}
-k <- 1:46
 
 fit_stats_norm <-
-  tibble(k = k,
+  tibble(k = 1:46,
          R2 = rep(-1, length(k)),
          MAE = rep(-1, length(k)))
 
-for (i in 1:length(k)){
+for (i in 1:(nrow(fit_stats_norm)-1)){
   loop_knn <-
     knn.reg(
-      train = num_species_norm,
-      y = species_and_acres$num_species,
-      k = k[i]
-      ) 
+      train = num_species_norm |> dplyr::select(acres),
+      y = num_species_norm$num_species,
+      k = i)
   
   fit_stats_norm[i, "R2"] <- loop_knn$R2Pred
   fit_stats_norm[i, "MAE"] <- (species_and_acres$num_species - loop_knn$pred) |> abs() |> mean()
@@ -796,33 +793,25 @@ fit_stats_norm
 
 
 ```{r k_stan}
-k <- 1:46
 
 fit_stats_stan <-
-  tibble(k = k,
+  tibble(k = 1:46,
          R2 = rep(-1, length(k)),
          MAE = rep(-1, length(k)))
 
-for (i in 1:length(k)){
-  loop_knn <-
+for (i in 1:(nrow(fit_stats_stan)-1)){
+  loop_knn_1 <-
     knn.reg(
-      train = num_species_stan,
-      y = species_and_acres$num_species,
-      k = k[i]
-      ) 
+      train = num_species_stan |> dplyr::select(acres),
+      y = num_species_stan$num_species,
+      k = i)
   
-  fit_stats_stan[i, "R2"] <- loop_knn$R2Pred
-  fit_stats_stan[i, "MAE"] <- (species_and_acres$num_species - loop_knn$pred) |> abs() |> mean()
+  fit_stats_stan[i, "R2"] <- loop_knn_1$R2Pred
+  fit_stats_stan[i, "MAE"] <- (species_and_acres$num_species - loop_knn_1$pred) |> abs() |> mean()
   
 }
 
 fit_stats_stan
-
-
-for (i in 1:10){
-  print(i)
-}
-
 ```
 
 ```{r plotting}
