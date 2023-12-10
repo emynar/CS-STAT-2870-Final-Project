@@ -1,0 +1,1157 @@
+---
+title: "Biodiversity in National Parks"
+author: "Emily Mynar, Jack McCormick, & Pierre Beaurang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE,
+                      #fig.width=8, 
+                      #fig.height=5,
+                      warning = F,
+                      message = F)
+
+
+# Load packages
+pacman::p_load(dplyr, ggplot2, tidyverse, ggthemes, maps, ggrepel, rpart, rpart.plot, caret, FNN, skimr, broom, GGally)
+
+# Set default theme
+theme_set(theme_bw())
+
+# Read in files
+parks <- read.csv('parks.csv') |>
+  janitor::clean_names()
+
+species <- read.csv('species.csv') |>
+  janitor::clean_names() 
+
+tibble(species)
+tibble(parks)
+
+```
+\newpage
+
+### Data Cleaning
+
+Our data comes from two data sets:
+
+1) **parks:** contains general information (size, latitude, longitude, etc.) about each National Park in the United States. This will be largely supplemental, but provides important contextual information we will use later
+
+2) **species:** contains a record of each species recorded in a certain National Park. This will be our main data set.
+
+Along with the true taxonomic groupings of order and family, the data also includes a *'category'* variable, which is not equivalent to any true taxonomic grouping, but instead consists of informal groupings which are recognizable to the layperson. Let's take a look at them now, since we'll be using these groups for much of our analysis.
+```{r categories}
+
+# Display species categories
+categories <-
+  species |>
+  group_by(category) |>
+  summarize(category_count = n()) |>
+  dplyr::select(category)
+
+tibble(categories)
+```
+14 categories, but for our purposes, we only care about the **animal** diversity of these parks. As such, we will go ahead and remove *algae*, *fungi*, *Nonvascular plants*, and *Vascular plants*.  
+
+As we began analyzing our data, we realized that reporting of insects was inconsistent, and skewed our data heavily in the wrong direction. As such, we decided to limit our scope to **vertebrate** biodiversity rather than animal diversity. To accomplish this, we removed the *insect* group which was causing problems, as well as all other invertebrate categories *Invertebrate*, *Crab/Lobster/Shrimp*, *Slug/Snail* and *Spider/Scorpion*
+
+We'll also implement a handful of other changes to our data: removing record status and seasonality, which are not useful for our driving question, adding a genus category, which is taken from the scientific name, and shortening the names of parks to remove the suffix for clarity.
+
+```{r data cleaning}
+
+species_clean <-
+  species |>
+  # Remove record status and seasonality
+  dplyr::select(-record_status, -seasonality, -x) |>
+  # Filter non-animal species,
+  # Filter invertebrate species
+  filter(!category %in% c('Algae', 'Fungi', 'Nonvascular Plant', 'Vascular Plant', 'Insect', 'Invertebrate', 'Crab/Lobster/Shrimp', 'Slug/Snail', 'Spider/Scorpion')) |>
+  # Add genus column
+  mutate(genus = str_split(scientific_name, " ", simplify = T)[ , 1]) |>
+  # Reorder columns
+  relocate(genus, .before = scientific_name) |>
+  # Make park names shorter
+  mutate(park_name = str_remove(park_name, 'National Parks'),
+         park_name = str_remove(park_name, 'National Park'),
+         park_name = str_remove(park_name, 'and Preserve'))
+
+tibble(species_clean)
+
+
+parks_clean <-
+  parks |>
+  # Make park names shorter
+  mutate(park_name = str_remove(park_name, 'National Parks'),
+         park_name = str_remove(park_name, 'National Park'),
+         park_name = str_remove(park_name, 'and Preserve'))
+
+tibble(parks_clean)
+```
+Lastly, we'll combine the two data sets and remove the park code.
+
+We have decided to restrict our data to the contiguous United States, for a number of reasons. Alaska and Hawaii have populations that are so different from the rest of the country that they are hardly comparable. Removing them makes our data far less complex, as it removes species that are found nowhere else in the country. It also serves the secondary purpose of making the data mapping easier. 
+
+```{r combined dataset}
+species_park <-
+  species_clean |>
+  # Add park info to species dataset
+  left_join(y = parks_clean, by = 'park_name') |>
+  # Remove park code
+  dplyr::select(-park_code) |>
+  # Remove parks in Alaska or Hawaii for mapping purposes
+  filter(!state %in% c('AK', 'HI')) 
+  
+tibble(species_park)
+```
+
+Here are our updated species, categories, which will be used throughout the rest of the analysis. 
+
+```{r updated categories}
+
+# Display updated species categories
+categories_clean <-
+  species_clean |>
+  group_by(category) |>
+  summarize(category_count = n()) |>
+  dplyr::select(category)
+
+tibble(categories_clean)
+
+```
+\newpage
+
+### Data Analysis
+
+Because our categories are not true taxonomic groupings, we need some context to the diversity within each. Lets examine orders first.
+
+```{r overall taxanomic categories proportion}
+
+category_prop <-
+  
+  species_clean |>
+  group_by(category) |>
+  summarize(number_cat = n()) |>
+  mutate(number_tot = sum(number_cat),
+         prop = number_cat/number_tot) |>
+  dplyr::select(category, prop)
+
+category_prop |>
+  
+  ggplot(mapping = aes(
+    y = prop,
+    x = "",
+    fill = category
+  )) +
+
+  geom_col(position = "fill",
+           color = "black") +
+  
+  labs(x = NULL,
+       y = "Proportion by Category",
+       fill = "Category",
+       title = "Proportion of Each Taxanomic Category")
+
+  species_clean |>
+  group_by(category, order) |>
+  summarize(number_ord = n()) |>
+  mutate(number_tot = sum(number_ord),
+         prop = number_ord/number_tot) |>
+  dplyr::select(category, order, prop) |>
+  
+  ggplot(mapping = aes(
+    x = prop,
+    y = "",
+    fill = order
+  )) +
+    
+    geom_col(position = "fill",
+           color = "black") +
+    labs(y = NULL,
+       x = "Proportion by Order",
+       fill = "Category",
+       title = "Proportion of Each Order") +
+    
+    facet_wrap(facets = '~category') +
+    
+    theme(legend.position = 'none')
+
+
+```
+\newline
+
+As seen above, the vast majority of species observed fall into the **bird** categories. This can be explained by a few different hypotheses:
+
+1) Because we removed seasonality, we are looking at species spotted in the park at any time of year, including species that are strictly migratory. Due to their migratory nature, the average bird species is often has a wider range of observation than that of an equivalent reptile, amphibian or mammal. 
+
+2) Additionally, due to a variety of factors, birds are often have more comprehensive records than any other group. The MAPS program, created by the Institute for Bird Populations has gone a long way to creating distribution patterns across the United States, and the role of citizen science, on programs like eBird or iNaturalist create lists of observed species without the need for a monitoring program run by the park. 
+
+3) Birds naturally have a high diversity, and occur across ecosystems. As such, every park is likely to have birds present, while fish, amphibians, reptiles, and mammals are far more restricted to certain habitats. 
+
+```{r species by park}
+
+ggplot(data = species_park |> group_by(park_name),
+       mapping = aes(x = fct_infreq(park_name))) +
+  
+  geom_bar(fill = 'deepskyblue3') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Number of species in each park') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+
+```
+\newline
+
+Deciding on conservation priorities requires the consideration of many different factors. For our purposes, we would argue that the biodiversity of a region is the most important factor. What method should be used to calculate this amorphous idea of 'biodiversity' is a topic of some debate. For our purposes, we have chosen a **raw species richness.** 
+
+As can be seen in the graph above and table below, the parks with the greatest raw species richness are **Biscayne,** **Redwoods,** & **Everglades**. The parks with the lowest are **Mt. Rainier**, **Pinnacles** and **Black Canyon of the Gunnison**
+
+```{r species richness order}
+
+species_per_park <-
+  species_park |>
+  group_by(park_name, latitude, longitude, state, acres) |>
+  summarise(num_species = n()) |>
+  arrange(desc(num_species))
+
+tibble(species_per_park)
+
+park_order <-
+  species_per_park$park_name
+
+
+```
+However, raw number of species does not tell a manager the whole picture. Certain species require more help than others. If the national parks service was concerned with protection endangered species, certain parks may be more worth investing in than others. 
+
+```{r endangered species by park}
+#isolating endangered species
+endangered_species <-
+  species_park |>
+  filter(conservation_status != "")
+
+ggplot(data = endangered_species |> group_by(park_name),
+       mapping = aes(x = fct_infreq(park_name))) +
+  
+  geom_bar(fill = 'deepskyblue3') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Threatened Species per park') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+
+
+
+```
+\newline
+
+Here we can see that the parks with the highest number of species listed as a 'species of concern' or worse by the National Parks are **Death Valley,** **Redwoods,** and the **Grand Canyon.** 
+
+In contrast, **Congaree** has the lowest number of endangered species.
+
+```{r endangered species richness order}
+endangered_species_per_park <-
+  endangered_species |>
+  group_by(park_name, latitude, longitude, state, acres) |>
+  summarise(num_species = n()) |>
+  arrange(desc(num_species))
+
+tibble(endangered_species_per_park)
+
+endangered_order <-
+  endangered_species_per_park$park_name
+
+
+```
+The total number of endangered species is important for management consideration, but these ecosystems may just have a large gross number of species. However, it may be worth focusing on ecosystems with a large **proportion of endangered species**.
+
+There are two theories behind why an ecosystem has many endangered species:
+1) Some quality of the environment attracts species with specific habitat requirements, which are more likely to become endangered. 
+
+2) The national park is the last remnant of an ecosystem that used to be far more prevalent, and the species within became endangered as the ecosystem did. 
+
+Either way, an organization considered with preserving biodiversity would get more 'bang for their buck' if they put their attention on these ecosystems. 
+
+Under these criteria, the parks that should be focused on are *Pinnacles,* *The Petrified Forest*, and *Sequoia*. *Biscayne,* *The Everglades*, and *The Dry Tortugas*, on the other hand, consist of ecosystems primarily composed of non-threatened species. 
+
+```{r Proportion Endangered Species Per Park}
+
+prop <- left_join(species_per_park, endangered_species_per_park, by = "park_name")
+
+prop |>
+  ungroup() |>
+  mutate(proportion_endangered = (num_species.y / num_species.x)) |>
+  arrange(desc(proportion_endangered)) -> proportion_endangered
+
+tibble(proportion_endangered)
+
+proportion_order <-
+  proportion_endangered$park_name
+  
+
+
+```
+Lastly, to provide some context to the previous data points, the following graph shows the taxonomic categories present in each park. 
+
+The most important insight to be gleaned from this data is the *'Biscayne Question'.* This park has simultaneously the highest number of species and the lowest proportion of endangered species (the same paradox is true of Everglades park, to a lesser extent). 
+
+However, the answer becomes present here. According to the IUCN, bony fishes are the invertebrate group with the lowest proportion of endangered species. The parks in our data set that have a large number of fish (Biscayne, Everglades, Dry Tortugas, etc.) are likely to have a low proportion of endangered species.
+
+As such, if the National Park Service is concerned with managing for *raw biodiversity*, we would advocate for an *increased focus on largely aquatic parks*. If they are more concerned with *protecting endangered species* we could recommend an approach that *disregards largely aquatic parks in favor of others*. 
+
+Of course, the reality is not black and white, and this study ignores other factors that could potentially swing the recommendation in a different direction. No management plan is complete when only one facet of the problem is included. This is simply our recommendation based on the information at hand. 
+
+
+```{r taxonomic categories by park}
+
+categories_by_park <-
+  species_park |>
+  group_by(park_name, category) |>
+  summarise(cat_sum = n())
+
+ggplot(data = categories_by_park,
+       mapping = aes(x = factor(park_name,
+                                levels = park_order))) +
+  
+  geom_col(mapping = aes(y = cat_sum,
+                         fill = category),
+           position = 'stack') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
+  
+  labs(x = 'Park name',
+       y = 'Number of species',
+       fill = 'Category',
+       title = 'Number of species in each park by category') +
+  
+  scale_y_continuous(expand = c(0,0, 0.05, 0)) 
+
+
+
+# Same plot but by proportion
+ggplot(data = categories_by_park,
+       mapping = aes(x = factor(park_name,
+                                 levels = park_order),
+                     y = cat_sum,
+                     fill = category)) +
+  
+  geom_col(position = 'fill') +
+  
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1,
+                                   size = 7),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'),
+        axis.title = element_text(size = 10)) +
+  
+  labs(x = 'Park name',
+       y = 'Proportion of species',
+       fill = 'Category',
+       title = 'Proportion of species in each park by category') +
+  
+  scale_y_continuous(labels = scales::percent,
+                     expand = c(0,0)) 
+  
+  
+
+  
+
+```
+\newpage
+
+### Mapping
+We have created four maps to illustrate certain relationships between the data.
+
+In all maps, the color of the point represents the state the park lies within.
+
+
+```{r map outline}
+map_outline <-
+  ggplot(data = map_data(map = 'state'),
+         mapping = aes(x = long,
+                       y = lat,
+                       group = group)) +
+  
+  geom_polygon(fill = 'white',
+               color = 'grey30') +
+  
+  theme_map() +
+  
+  coord_map(projection = "albers", 
+            lat0 = 39, lat1 = 45) +
+  
+  scale_x_continuous(expand = c(0,0)) +
+  
+  scale_y_continuous(expand = c(0,0))
+
+```
+
+Map 1:
+
+In this map, we have used the size of the point to represent the *gross species richness*. 
+
+```{r species richness map}
+ richness_map <-
+  
+  map_outline +
+  
+  geom_point(data = species_per_park,
+           mapping = aes(x = longitude,
+                        y = latitude,
+                       group = park_name,
+                       size = num_species,
+                       color = state)) +
+  
+  geom_text_repel(data = species_per_park,
+            mapping = aes(x = longitude,
+                          y = latitude,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  labs(title = 'Species richness by park',
+       size = 'Number of species') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+  
+  
+richness_map
+```
+\newline
+
+Map 2:
+
+In this map, we have used the size of the point to represent the *total endangered species*. 
+
+```{r endangered species map by park}
+endangered_map <-
+  
+  map_outline +
+  
+  geom_point(data = endangered_species_per_park,
+           mapping = aes(x = longitude,
+                        y = latitude,
+                       group = park_name,
+                       size = num_species,
+                       color = state)) +
+  
+  geom_text_repel(data = endangered_species_per_park,
+            mapping = aes(x = longitude,
+                          y = latitude,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  labs(title = 'Number of endangered species by park',
+       size = 'Number of species') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+  
+  
+endangered_map
+
+```
+\newline
+
+Map 3:
+
+In this map, we have used the size of the point to represent the *proportion of species that are threatened or endangered*.
+
+```{r proportion endangered map}
+
+proportion_map <-
+  
+  map_outline +
+  
+  geom_point(data = proportion_endangered,
+           mapping = aes(x = longitude.x,
+                        y = latitude.x,
+                       group = park_name,
+                       size = proportion_endangered,
+                       color = state.x)) +
+  
+  geom_text_repel(data = proportion_endangered,
+            mapping = aes(x = longitude.x,
+                          y = latitude.x,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  
+  labs(title = 'Proportion threatened species by park',
+       size = 'Proportion of species that are threatened or endangered') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+
+  
+  
+proportion_map
+
+```
+\newline
+
+Map 4:
+
+In our final map, we have used the size of the point to represent the *total endangered species*.
+
+We will use the size of parks and the number of species in the next segment.
+
+
+```{r park size map}
+richness_map <-
+  
+  map_outline +
+  
+  geom_point(data = species_per_park,
+           mapping = aes(x = longitude,
+                        y = latitude,
+                       group = park_name,
+                       size = acres,
+                       color = state)) +
+  
+  geom_text_repel(data = species_per_park,
+            mapping = aes(x = longitude,
+                          y = latitude,
+                          group = park_name,
+                          label = park_name),
+            hjust = 0.1,
+            size = 1.8,
+            fontface= 'bold',
+            max.overlaps = 15) +
+  
+  scale_size(breaks = seq(from = 100000, to = 2500000, by = 200000)) +
+  
+  labs(title = 'Park size',
+       size = 'Acreage') +
+  
+  guides(color = F) +
+  
+  theme(legend.position = 'bottom',
+        legend.direction = 'horizontal',
+        legend.box.background = element_rect(color = 'black'),
+        plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold'))
+  
+  
+richness_map
+```
+\newpage
+
+### Machine Learning
+Before we begin with our machine learning segment, we will primarily examine the relationship between park size and biodiversity. This analysis will provide the National Park Service with an invaluable data point. A larger park will require more funding, manpower, and work. If it is assumed that larger park = high biodiversity, the National Park Service will assign the most intensive management plans to the largest parks. However, using machine learning, we can devise a method that will determine the amount of effort to be put into a park based on the relationship between park size and biodiversity.
+
+```{r scatter plot of size vs richness}
+# Creating the graph, to see the correlation of acres and num_species
+ggplot(data = species_per_park,
+       mapping = aes(x = acres,
+                     y = num_species)) +
+  
+  # Making the scatterplot
+  geom_point(color = 'deepskyblue3') +
+  
+  #adding in the line of best fit
+  geom_smooth(
+    method = "loess",
+    se = F,
+    formula = y ~ x
+  ) +
+  
+  # Changing the labels
+  labs(x = 'Size (acres)',
+       y = 'Number of species',
+       title = 'Park size vs. number of distinct species') +
+  
+  # Centering the title
+  theme(plot.title = element_text(size = 12,
+                                  hjust = 0.5,
+                                  face = 'bold')) +
+  
+  # changing the labels of the scales
+  scale_x_continuous(labels = scales::comma) 
+  
+  
+
+```
+\newline
+
+The very first thing to be done is to determine if this relationship actually exists. To do this, we will construct a correlation matrix of the variables currently used.
+
+```{r size richness correlation}
+
+# Making a plot that shows the correlation between each of the variables
+GGally::ggcorr(
+  data = species_per_park,
+  low = "red3",
+  mid = "white",
+  high = "blue3",
+  label = T,
+  label_round = 2
+)
+```
+\newline
+
+As we can see, there is a positive correlation between the number of species and the size of the park. Knowing this, we can forge ahead with our machine learning and examine this relationship in detail. Additionally, it seems like there is a stronger negative correlation between latitude and num_species, which means that as the latitude goes down, the species richness seems to go up. There is also very little correlation between the acres and the latitude, which means that there would be less multicolinearity than if we used longitude as well. We will keep this in mind, and in the case that acres alone is not a great predictor of species richness, we may incorporate the latitude variable into the conversation as well.
+
+#Regression Tree:
+
+First, let's make the data set that we will use for the machine learning methods that have acres predicting the number of species, or species richness in a park.
+
+Additionally, let's make the full tree and display it!
+
+```{r regression tree}
+# Creating a data set to use for the machine learning, with only the predictor variable (acres) and the response variable (num_species)
+species_and_acres <-
+  species_per_park |>
+  ungroup() |>
+  dplyr::select(acres, num_species)
+
+# creating the full tree
+species_tree_full <-
+  rpart(
+    formula = num_species ~ acres,
+    data = species_and_acres,
+    method = "anova",
+    minsplit = 2,
+    minbucket = 1,
+    cp = -1
+  )
+
+# Showing the tree as a data frame
+species_tree_full$cptable |>
+  data.frame()
+
+# Displaying the full tree
+rpart.plot(species_tree_full,
+           digits = 4,
+           fallen.leaves = TRUE,
+           type = 5,
+           box.palette = 'BlGnYl',
+           shadow.col = "gray")
+
+```
+In this next chunk, our goal is to find the CP Value of the tree that will be the simplest but also have an xerror that is less than the lowest xerror plus standard deviation of that lowest xerror.
+
+**xerror < min(xerror) + xstd**
+
+```{r pruning}
+# Creating the plot that will help visualize the xerrors of each potential size of the tree
+plotcp(species_tree_full)
+
+# Finding the minumum xerror + that xerror row's xstd
+species_tree_full$cptable |> # Piping in the cp table
+  data.frame() |> # Making it a data frame so we can use dplyr verbs
+  slice_min(xerror, n = 1, with_ties = F) |> # Finding the row with the smallest xerror
+  mutate(xerror_cutoff = xerror + xstd) |> # Making a new value, the xerror + the xstd
+  pull(xerror_cutoff) -> # Getting only the new value that we created
+  xcutoff # Saving the xerror_cutoff value
+
+# Finding the appropriate cp value using the xcutoff
+species_tree_full$cptable |> # Piping in the cp table
+  data.frame() |> # Making it a data frame so we can use dplyr verbs
+  filter(xerror < xcutoff) |> # Finding only the rows where the xerror cutoff is greater than the xerror in that row
+  slice(1) |> # Taking only the first row because that will be the simplest
+  pull(CP) -> # Getting the CP value from that row to find out what value we should give the pruning
+  cp_value # Saving the cp_value
+
+# Displaying the xcutoff and the cp value in the knitted document
+c("xcutoff" = xcutoff,
+  "CP value" = cp_value)
+
+# Creating the pruned tree
+species_tree_pruned <-
+  rpart::prune(tree = species_tree_full,
+      cp = cp_value)
+
+```
+So now we have the pruned regression tree for when we use acres to predict species richness; in the next code chunk, we will display the tree: 
+
+```{r visualizing the pruned tree}
+# Displaying the pruned tree
+rpart.plot(species_tree_pruned,
+           digits = 4,
+           fallen.leaves = TRUE,
+           type = 5,
+           box.palette = 'BlGnYl',
+           shadow.col = "gray")
+
+```
+As you might have been able to predict based on the plotcp, our predictor variable of acres is not useful for predicting the species richness. Our row in the cptable with the lowest xerror is the first row, where we have zero splits, and thus one node with 100% of the data. This signals that we are better off guessing the species richness of a national park than using acres to guess the species richness - this makes sense because the relationship that we saw earlier between acres and num_species was not very linear, and the correlation was only .4. 
+
+For this reason, we will try using latitude and acres going forward to predict the number of species in a park:
+
+#Latitude:
+
+In the next code chunk, we will make a new data set with latitude included as a predictor variable, and two scatterplots to help visualize the relationship between each of the predictor variables and the response variable side by side.
+
+```{r latitude}
+# Creating a data set to use for the rest of the machine learning, with only the predictor variables (acres and latitude) and the response variable (num_species)
+predicting_species <-
+  species_per_park |>
+  ungroup() |>
+  dplyr::select(acres, latitude, num_species)
+
+# Wrangling so I can make scatterplots with small multiples for each predictor variable with the response variable
+predicting_species |>
+  pivot_longer(
+    cols = c(acres, latitude),
+    names_to = "explanatory",
+    values_to = "percent"
+  ) |>
+  
+  mutate(explanatory = as_factor(explanatory)) |>
+  
+  # Making the graph
+  ggplot(mapping = aes(x = percent,
+                       y = num_species)) +
+  
+  # Adding in the scatterplot
+  geom_point() +
+  
+  # Making the line of best fit
+  geom_smooth(
+    method = "loess",
+    se = F,
+    formula = y ~ x
+  ) +
+  
+  # Making the small multiples
+  facet_wrap(
+    facets = ~ explanatory,
+    scales = "free_x"
+  )
+
+```
+
+It seems that latitude has a relationship bith num_species that is a bit more linear than that of acres, but we will have to see how the machine learning methods go using both variables to predict.
+
+#Regression Tree with Latitude:
+
+
+First, let's make the data set that we will use for the machine learning methods that have acres predicting the number of species, or species richness in a park, this time with latitude included as an additional predictor variable.
+
+Additionally, let's make the full tree and display it!
+
+```{r regression tree 2}
+
+# Making the full regression tree
+species_tree_full_2 <-
+  rpart(
+    formula = num_species ~ acres + latitude,
+    data = predicting_species,
+    method = "anova",
+    minsplit = 2,
+    minbucket = 1,
+    cp = -1
+  )
+
+# Displaying the regression tree as a data frame
+species_tree_full_2$cptable |>
+  data.frame()
+
+# Displaying the full tree
+rpart.plot(species_tree_full_2,
+           digits = 4,
+           fallen.leaves = TRUE,
+           type = 5,
+           box.palette = 'BlGnYl',
+           shadow.col = "gray")
+
+```
+In this next chunk, our goal is to find the CP Value of the tree that will be the simplest but also have an xerror that is less than the lowest xerror plus standard deviation of that lowest xerror; like we did last time, but with latitude this time.
+
+```{r pruning 2}
+# Creating the plot that will help visualize the xerrors of each potential size of the tree
+plotcp(species_tree_full_2)
+
+
+# Finding the minumum xerror + that xerror row's xstd
+species_tree_full_2$cptable |> # Piping in the cp table
+  data.frame() |> # Making it a data frame so we can use dplyr verbs
+  slice_min(xerror, n = 1, with_ties = F) |> # Finding the row with the smallest xerror
+  mutate(xerror_cutoff = xerror + xstd) |> # Making a new value, the xerror + the xstd
+  pull(xerror_cutoff) -> # Getting only the new value that we created
+  xcutoff_2 # Saving the xerror_cutoff value
+
+# Finding the appropriate cp value using the xcutoff
+species_tree_full_2$cptable |> # Piping in the cp table
+  data.frame() |> # Making it a data frame so we can use dplyr verbs
+  filter(xerror < xcutoff) |> # Finding only the rows where the xerror cutoff is greater than the xerror in that row
+  slice(1) |> # Taking only the first row because that will be the simplest
+  pull(CP) -> # Getting the CP value from that row to find out what value we should give the pruning
+  cp_value_2 # Saving the cp_value
+
+# Displaying the xcutoff and the cp value in the knitted document
+c("xcutoff" = xcutoff_2,
+  "CP value" = cp_value_2)
+
+# Creating the pruned tree
+species_tree_pruned_2 <-
+  rpart::prune(tree = species_tree_full_2,
+      cp = cp_value_2)
+
+```
+
+So now we have the pruned regression tree for when we use acres to predict species richness; in the next code chunk, we will display the tree: 
+
+```{r visualizing the pruned tree 2}
+rpart.plot(species_tree_pruned_2,
+           digits = 4,
+           fallen.leaves = TRUE,
+           type = 5,
+           box.palette = 'BlGnYl',
+           shadow.col = "gray")
+
+
+```
+
+We still only have one node! It seems like, to make a regression tree to predict num_species, we would probably want to be able to identify more predictor variables still in order to give the National Parks Service a more useful method
+
+For the scope of our project, however, we will not be able to identify those other variables, as we only have so many available in the data set that we are working with. That said, we can try out some other machine learning methods to see if they have any more success:
+
+#KNN Regression with Latitude:
+
+Now, we will try engaging in K Nearest Neighbors regression. For this machine learning method, we will need to rescale the explanatory variables, either using normalization of standardization, since KNN regression uses distance to classify the points of data, and since we have multiple explanatory variables.
+
+Normalization: $$\frac{x - \min(x)}{\max(x) - \min(x)}$$
+
+Standardization: $$\frac{x - \bar{x}}{s}$$
+
+In the below code chunk, we will create the two functions in our rmd and normalize and standardize the explanatory columns in two different new data sets:
+
+```{r resizing}
+# Creating min-max normalization function
+normalize <- function(x){
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
+# Normalizing the species data:
+num_species_norm <- 
+  predicting_species |>
+  mutate(across(.cols = c(acres, latitude),
+                .fns = normalize))
+
+# Creating standardization function
+standardize <- function(x){
+  return((x - mean(x)) / sd(x))
+}
+
+# Standardizing the species data set:
+num_species_stan <- 
+  predicting_species |>
+  mutate(across(.cols = c(acres, latitude),
+                .fns = standardize))
+```
+
+
+Now, we will use the normalized data to create a data frame to record the fit statistics, both the R^2 value and the MAE, for each value of k, using a for loop:
+
+``` {r k_norm}
+# Creating the data frame that will be used to record the fit statistics
+fit_stats_norm <-
+  tibble(k = 1:46,
+         R2 = rep(-1, length(k)),
+         MAE = rep(-1, length(k)))
+
+# A for loop that will record the fit stats in each particular column of the data frame
+for (i in 1:(nrow(fit_stats_norm)-1)){
+  loop_knn <-
+    knn.reg(
+      train = num_species_norm |> dplyr::select(acres, latitude), # Training data as the normalized predictor variables
+      y = num_species_norm$num_species, # Actual values that are the num_species actual values
+      k = i) # Setting the k value as the value of the loop that we are doing, since k will equal the row number for each row
+  
+  # Recording the fit stats in their particular locations
+  fit_stats_norm[i, "R2"] <- loop_knn$R2Pred 
+  fit_stats_norm[i, "MAE"] <- (predicting_species$num_species - loop_knn$pred) |> abs() |> mean()
+  
+}
+
+# Displaying the fit stats
+fit_stats_norm
+```
+
+Next, we will use the standardized data to create a data frame to record the fit statistics, both the R^2 value and the MAE, for each value of k, using a for loop:
+
+```{r k_stan}
+# Creating the data frame that will be used to record the fit statistics
+fit_stats_stan <-
+  tibble(k = 1:46,
+         R2 = rep(-1, length(k)),
+         MAE = rep(-1, length(k)))
+
+# A for loop that will record the fit stats in each particular column of the data frame
+for (i in 1:(nrow(fit_stats_stan)-1)){
+  loop_knn_1 <-
+    knn.reg(
+      train = num_species_stan |> dplyr::select(acres, latitude), # Training data as the standardized predictor variables
+      y = num_species_stan$num_species, # Actual values that are the num_species actual values
+      k = i) # Setting the k value as the value of the loop that we are doing, since k will equal the row number for each row
+  
+  # Recording the fit stats in their particular locations
+  fit_stats_stan[i, "R2"] <- loop_knn_1$R2Pred
+  fit_stats_stan[i, "MAE"] <- (predicting_species$num_species - loop_knn_1$pred) |> abs() |> mean()
+  
+}
+
+# Displaying the fit stats
+fit_stats_stan
+```
+
+Okay, now that we have all of the rows of k for both the normalization and standardization methods, with all of the fit statistics, we will plot the data in graphs to visualize where there is a balance between MAE being low and R^2 being high in each of the methods for resizing the explanatory variables. 
+
+```{r plotting}
+
+# Piping the normalized fit stats into data wrangling so we can make small multiples
+fit_stats_norm |>
+  pivot_longer(
+    cols = R2:MAE,
+    names_to = "fit_stat",
+    values_to = "fit"
+  ) |>
+  
+  # Making the graph parameters
+  ggplot(mapping = aes(x = k,
+                       y = fit,
+                       color = fit_stat)) +
+  
+  # Putting in the lines for MAE and R^2
+  geom_line(show.legend = F) +
+  
+  # Making the small multiples
+  facet_wrap(facets = ~ fit_stat,
+             scales = "free_y",
+             ncol = 1)
+
+# Piping the standardized fit stats into data wrangling so we can make small multiples
+fit_stats_stan |>
+  pivot_longer(
+    cols = R2:MAE,
+    names_to = "fit_stat",
+    values_to = "fit"
+  ) |>
+  
+  
+    # Making the graph parameters
+    ggplot(mapping = aes(x = k,
+                         y = fit,
+                         color = fit_stat)) +
+  
+  # Putting in the lines for MAE and R^2
+  geom_line(show.legend = F) +
+  
+    # Making the small multiples
+  facet_wrap(facets = ~ fit_stat,
+             scales = "free_y",
+             ncol = 1)
+
+# Making a data set where we have both the normalized and standardized fit statistics so we can analyze them together
+fit_stats_combined <-
+  bind_rows("stan" = fit_stats_stan,
+            "norm" = fit_stats_norm,
+            .id = "rescale")
+
+# Piping in the combined data to wrangle it in order to make a graph with small multiples
+fit_stats_combined |>
+  pivot_longer(cols = c(R2, MAE),
+               names_to = "fit_stat",
+               values_to = "value") |>
+  
+  # Setting up the graph parameters
+  ggplot(mapping = aes(x = k,
+                       y = value,
+                       color = rescale)) +
+  
+  #adding in the lines for the graph
+  geom_line() +
+  
+  #making the small multiples
+  facet_wrap(
+    facets = ~ fit_stat,
+    scales = 'free_y',
+    ncol = 1
+  ) +
+  
+  #getting rid of some of the labels
+  labs(y = NULL,
+       color = NULL)
+
+```
+
+Okay, so we see that there is a pattern, where as we increase k, there is a spot where R^2 has a maximum and MAE has a minimum, but it's hard to pinpoint that exactly.
+
+In this next code chunk, we will use filter functions on the data set that we made before with the combined data to find the rows with the lowest MAE and the highest R^2
+
+```{r fit stats combined}
+# Piping in the combined data to find the rows
+fit_stats_combined |>
+  filter(R2 != -1) |> # The 46th row for both data sets has an R^2 value of -1 and this was messing up the filter in the next row, so i got rid of those rows
+  # Finding the rows where R^2 is highest or MAE is lowest
+  filter(
+    R2 == max(R2) | MAE == min(MAE)
+  ) 
+
+```
+
+So we have two rows now to choose from, and, since we don't have a preference on whether to prefer the row that looks at R^2 or the one that has the lowest MAE, we will choose the row with the higher k value to reduce overfitting of the data, since we want our data to be able to be applied to new data that is coming in, not only the training set that we used.
+
+In this next code chunk, we will make a new knn regression model where k = 11, and find all of the fit statistics for that knn regression model again so we can discuss them:
+
+```{r knn_11}
+
+knn_best <-
+  knn.reg(
+     train = num_species_norm |> dplyr::select(acres, latitude),
+      y = num_species_norm$num_species,
+      k = 11
+  )
+
+tibble(y = predicting_species$num_species,
+       y_hat = knn_best$pred) |>
+  
+  summarize(
+    R2 = 1 - sum((y-y_hat)^2)/sum((y - mean(y))^2),
+    MAE = (y - y_hat) |> abs() |> mean(),
+    MAE_mean = (y - mean(y)) |> abs() |> mean(),
+    MAER = 1 - MAE/MAE_mean
+  )
+
+```
+
+So, essentially. we learn from these fit statistics that, on average, the predicted value is off by 109.3 species from the actual number of species, that just using the mean of all of the values to get a predicted value would be off by 137.6 species, and that our method of using KNN regression increases our accuracy by about 20%. All things considered, this is not a whole lot, we could be doing a lot better if we had more predictor variables and if those variables had a clearer relationship with the number of species in a park. That said, this method has proven more useful than the regression tree.
+
+Now, we will try making a Linear regression model using the multiple variables.
+
+#Linear Regression with Latitude:
+
+As a final machine learning method, we will use a linear regression model with acres and latitude being used to predict num_species. Since acres and latitude have a correlation of 0.01, we should not run into any issues of multicollinearity at all.
+
+In this first code chunk, our goal is to make the model for this eager learner machine learning method, and to save it and display the summary of the model.
+
+```{r model_estimates}
+# Making the linear model, wehre acres and latitude are used to predict the number of species
+lm(
+  formula = num_species ~ acres + latitude,
+  data = predicting_species
+) ->
+  species_lm # Saving the model
+
+summary(species_lm) # Displaying the model
+
+
+```
+
+Now, usng the linear model that we just made, we will make a data frame with the model to look at some of the summary statisticsm in a more condensed form.
+
+```{r tidy function}
+# Turning the model into a data frame in order for us to see
+  tidy(species_lm)
+
+species_estimates |>
+  mutate(across(.cols = where(is.numeric),
+                .fns = round,
+                digits = 3))
+```
+
+The p-values of both of the predictor variables are both low (0.002 and o.ooo for acres and latitude respectively). That means that we don't have to be concerned with multicollinearity in this regard, and can use the information that we can gather with both of the predictor variables to make the machine learning model:
+
+```{r fit_stats}
+
+# Looking at the values that we will be using to make the fit statistics 
+glance(species_lm)
+
+# Creating a function named MAE that will get us the MAE and the MAE_reduction for the model
+MAE <- function(actual, predicted){
+  mae <- abs(actual - predicted) |> mean()
+  mae_red <- 1 - mae/mean(abs(actual - mean(actual)))
+  return(list(mae = mae,
+              reduction = mae_red))
+}
+
+# Using the function on our linear model
+MAE(actual = predicting_species$num_species,
+    predicted = species_lm$fit)
+
+# Making a new data frame for the fit statistics
+parks_lm_fit_stats <-
+  augment_columns(x = species_lm,
+                  data = predicting_species)
+
+# Getting a table with just the fit stats that we are curious about (R^2, MAE, and MAE Reduction)
+parks_lm_fit_stats |>
+  select(acres, latitude, num_species, .fitted, .resid) |>
+  summarize(
+    R2 = cor(num_species, .fitted)^2,
+    MAE = MAE(actual = num_species,
+              predicted = .fitted)$mae,
+    Reduction = MAE(actual = num_species,
+              predicted = .fitted)$reduction
+  )
+
+
+```
+
+With this information, we learn that our average error is 99.9 species, and our error is 27.4% less than if we were to just guess. Still, this method, while an improvement, is not exactly what were looking for for a consistent predictor of species richness in national parks.
+
+CONCLUSION:::
