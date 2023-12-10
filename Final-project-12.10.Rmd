@@ -1106,6 +1106,7 @@ Now, usng the linear model that we just made, we will make a data frame with the
 
 ```{r tidy function}
 # Turning the model into a data frame in order for us to see
+species_estimates <-
   tidy(species_lm)
 
 species_estimates |>
