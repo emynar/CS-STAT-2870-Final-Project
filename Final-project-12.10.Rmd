@@ -1115,7 +1115,7 @@ species_estimates |>
                 digits = 3))
 ```
 
-The p-values of both of the predictor variables are both low (0.002 and o.ooo for acres and latitude respectively). That means that we don't have to be concerned with multicollinearity in this regard, and can use the information that we can gather with both of the predictor variables to make the machine learning model:
+The p-values of both of the predictor variables are both low (0.002 and 0.002 for acres and latitude respectively). That means that we don't have to be concerned with multicollinearity in this regard, and can use the information that we can gather with both of the predictor variables to make the machine learning model:
 
 ```{r fit_stats}
 
@@ -1156,3 +1156,33 @@ parks_lm_fit_stats |>
 With this information, we learn that our average error is 99.9 species, and our error is 27.4% less than if we were to just guess. Still, this method, while an improvement, is not exactly what were looking for for a consistent predictor of species richness in national parks.
 
 CONCLUSION:::
+
+The use of data analytics in conservation is a growing field. The elimination of guesswork can allow managers to more effectively allocate manpower and funds. Our task in this scenario is to devise a management plan for the United States National Park service to maximize biodiversity across the country within the land they manage. Our major conclusions, were as follows:
+
+1) The lack of consistent insect surveying across the parks creates a barrier to accurately understanding biodiversity. More than half of the parks had no reported insect species. 
+
+2) The parks with the highest raw species richness are those that are largely aquatic, with some exceptions (Redwood, Death Valley). 
+
+3) However, these parks have a relatively low proportion of endangered species. The parks with the highest proportion of endangered species are concentrated in the Western and Southwestern states.
+
+4) The category with the most representation in the data is birds. This is likely due to birds being more highly migratory than other groups. 
+
+5) There is little to no association between park size and species richness.
+
+6) However, there is an association between park latitude and species richness. The parks in the Southern regions of the United States, on average, display a higher biodiversity.
+
+From these six points, we can make recommendations for management.
+
+1) To address this limitation, a consistent insect surveying plan should be developed and implemented across the parks. The Great Smokey Mountains National Park should lead the development of this plan, as their insect reporting is the most thorough of any park, and should be the gold standard that other parks strive for.
+
+2) If the National Parks are interested in conserving raw biodiversity numbers, the parks that should be prioritized are aquatic parks in the Southern part of the country, namely Biscayne, the Everglades, and the Dry Tortugas.
+
+3) If the National Parks Service is concerned with prioritizing the conservation of land with a high proportion of endangered species, parks in California and surrounding states are of the highest priority.
+
+4) To tackle the other major limitation in our study, the potential skew provided by migratory birds, a secondary analysis should be conducted, this time accounting for seasonality and land usage rather than strictly observation. Weighting species by the amount of time a year they spend relying on the natural resources present in the park could be one way of accomplishing this, but that is beyond the scope of our analysis. 
+
+5) While larger parks are always likely to require more attention, the biodiversity return may not be correlated with size. As such, the service can be confident in the future that small parks will yield a worthwhile return, and can empower the service to conserve small, high biodiversity patches of land as national parks.
+
+6) Lastly, while it is important to not neglect the northern reaches of the country, the finding that the highest biodiversity parks are in the southern United States implies that, for the establishment of future national parks, this part of the country should be the highest priority. 
+
+With this clear understanding of the patterns of biodiversity within the national parks, those concerned with the delegation of funds and manpower for conservation can know with clearer certainty how best to allocate resources. The national parks system has the potential to be an incredible conservation force, and the more accurate and precise the managers of this land can be with their decisions, the more the organisms within will benefit. 
