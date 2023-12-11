@@ -672,6 +672,7 @@ species_tree_full$cptable |>
   data.frame()
 
 ```
+
 ```{r pruning}
 plotcp(species_tree_full)
 
